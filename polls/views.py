@@ -53,10 +53,11 @@ class VoteView(APIView):
 class PollResultsView(APIView):
     def get(self, request, poll_id):
         poll = get_object_or_404(Poll, id=poll_id)
-        options = poll.options.all()
+        options = Option.objects.filter(poll=poll)
         serializer = OptionSerializer(options, many=True)
         return Response({
             "poll": poll.question,
             "results": serializer.data
         })
+        
 
