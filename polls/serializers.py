@@ -3,7 +3,7 @@ from django.utils import timezone
 from .models import Poll, Option, Vote
 
 class OptionSerializer(serializers.ModelSerializer):
-    votes_count = serializers.SerializerMethodField()
+    votes_count = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Option
@@ -11,11 +11,11 @@ class OptionSerializer(serializers.ModelSerializer):
 
     def get_votes_count(self, obj):
         # counts related Vote objects; uses related_name 'votes' on Vote.option
-        return obj.votes.count()
+        return obj.vote_records.count()
 
 
 class PollSerializer(serializers.ModelSerializer):
-    options = OptionSerializer(many=True)
+    options = OptionSerializer(many=True, required=True)
     created_by = serializers.ReadOnlyField(source="created_by.username")
 
     class Meta:
@@ -24,26 +24,22 @@ class PollSerializer(serializers.ModelSerializer):
         read_only_fields = ("created_by", "created_at")
 
     def validate_expiry_date(self, value):
-        # ensure expiry (if provided) is not in the past
         if value and value < timezone.now():
             raise serializers.ValidationError("expiry_date cannot be in the past")
         return value
 
     def create(self, validated_data):
-        options_data = validated_data.pop("options", [])
-        # created_by will be set in the view via perform_create
+        options_data = validated_data.pop("options")
         poll = Poll.objects.create(**validated_data)
-        for opt in options_data:
-            Option.objects.create(poll=poll, **opt)
+        for option in options_data:
+            Option.objects.create(poll=poll, **option)
         return poll
 
     def update(self, instance, validated_data):
-        # allow updating question and expiry_date; options are not updated here
-        options_data = validated_data.pop("options", None)
+        # Only update question & expiry_date, not options
         instance.question = validated_data.get("question", instance.question)
         instance.expiry_date = validated_data.get("expiry_date", instance.expiry_date)
         instance.save()
-        # if options_data provided, ignore or handle separately (choice: don't update here)
         return instance
 
 
